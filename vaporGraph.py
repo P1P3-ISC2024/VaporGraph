@@ -1,0 +1,368 @@
+#-*- coding: utf-8 -*-"""
+"""
+Programador: Martínez Alfaro Felipe de Jesús.
+
+Este programa está hecho para poder manejar grafos, consta de 6 practicas
+vistas en "Diseño y analisis de algoritmos".
+
+                        #
+                                #
+                                            #
+                                                        #
+                                                                            #
+"""
+
+"""                                     BIBLIOTECAS                                 """
+from ast import Return
+from math import sqrt
+import random
+import string
+from collections import UserDict
+from unittest import skip
+
+"""                                       CLASES                                    """
+# Clase para manejar las aristas.
+class Arista(dict):
+    pass;
+
+# Clase para el manejo de nodos, cada nodo gestiona sus aristas.
+class Nodo:
+    def __init__(self,id,dirigido:bool = False, ponderado:bool = False, valor=None) -> None:
+        self.id = id            # Identificador del nodo.
+        self.dir = dirigido     # Determina si pertenece a un grafo dirigido o no dirigido
+        self.pond = ponderado   # ¿Sus aristas están ponderadas?
+        self.val = valor        # Valor que se le desee darle a los nodos
+        self.A = Arista()       # Diccionario Nodo: ponderación, si es grafo simple => ponderación = 0.
+        pass;
+
+    def __str__(self) -> str:
+        des = f" {self.id} -{'>' if self.dir else '-'} "# Imprime según es o no dirigido.
+        des += '{'
+        for v in self.A:                                # Para cada clave del diccionario.
+            des += v.id.__str__() + ' '                 # El objeto id debe tener funcion __str__
+        des += '}'
+        return des;                                     # Debuelve toda la cadena.
+
+    # Añade una arista ó actualiza el valor de una ya existente.
+    def add(self,nodo,valor = 0) -> None:
+        self.A[nodo] = valor;                           # Añade la clave o la rescribe.
+        if not self.dir : nodo.A[self] = valor          # Solo si es no dirigido (doble sentido).
+    pass;
+    
+    # Elmina la arista que se relaciona con un nodo.
+    def cut(self,nodo) -> None:
+        self.A.pop(nodo,None)                           # None es para que no devuelva error si no existe.
+        if not self.dir: nodo.A.pop(self,None)          # Solo para no dirigidos.
+        pass;
+
+    # Indica si el nodo 'a' está conectado a 'b'
+    def isConected(self,b) -> bool:
+        return b in self.A;
+
+    # Devuelve una lista de aristas que maneja en forma de tupla.
+    def getAristas(self):
+        E = []
+        for nodo in self.A.keys():
+            E.append( (self,nodo) )
+        return E;
+
+    # Devuelve una lista de aristas que maneja en forma de tupla usando el id de los objetos.
+    def getDebugAristas(self):
+        E = []
+        for nodo in self.A.keys():
+            E.append( (self.id,nodo.id) )
+        return E;
+    pass;
+
+
+
+# Clase grafo encargado de crear los nodos que se neciesiten y tenerlos en una lista acorde al ID.
+class Grafo:
+    def __init__(self,id='G', num_nodos:int = 10,dirigido:bool = False, ponderado:bool = False, init_valor=None) -> None:
+        self.nodos = [Nodo(n,dirigido,ponderado,init_valor) for n in range(num_nodos)]  # Creo los nodos.
+        self.card = len(self.nodos)                     # Cardinalidad o numero de nodos.
+        self.id = id                                    # Identificador del grafo.
+        self.dir = dirigido                             # Si es o no un grafo dirigido.
+        self.pond = ponderado                           # Tiene ponderaciones?
+        self.posibles = self.card**2 if self.dir else ((self.card-1)**2+(self.card-1))/2# La cantidad de aristas que pueden existir.
+        pass;
+
+    def __str__(self) -> str:
+        descripcion = ("digraph " if self.dir else "graph ") + self.id.__str__() + " {"
+        for nodo in self.nodos:                         # Manda a expresar las aristas de cada nodo.
+            descripcion += f"\n\t{nodo.__str__()};";
+        descripcion += "\n}"                            # Cierra la descripción del grafo.
+        return descripcion;                             # Retorna el string
+
+    # Indica si la arista (a,b) existe.
+    def exist(self,a,b) -> bool:
+        return b in a.A;                                # La clave 'b' está en el diccinario de 'a'?
+
+    # Ingresa un valor a todos los nodos del grafo.
+    def setAll(self,valor,fun = None):
+        if fun == None:
+            for i in range(self.card):
+                self.nodos[i].val = valor.copy();       # Para que sus modif. sean indep.
+        else:
+            for i in range(self.card):
+                self.nodos[i].val = fun(i,valor);
+        pass;
+
+    # Guarda el contenido del grafo.
+    def save(self,nombre:str = "vapor", extension:str = ".gv"):
+        # Validar que la extensión comience con punto.
+        if not extension.startswith('.'):
+            extension = '.' + extension
+        # Construir el nombre completo del archivo
+        nombre_archivo = nombre + extension
+        # Escribir contenido en el archivo
+        try:
+            with open(nombre_archivo, 'w', encoding='utf-8') as archivo:
+                archivo.write(self.__str__())
+            print(f"Archivo guardado como: {nombre_archivo}")
+        except Exception as e:
+            print(f"Error al guardar el archivo: {e}")
+
+
+    # Conecta un grafo gnm malla.
+    def gnmalla(self, n:10,m:10):
+        for i in range(self.card):
+            #print(i,end = ' ')
+            if i%n<n-1:         # Columnas.
+                self.nodos[i].add(self.nodos[n*(i//n) + (i+1)%n])
+                #                                j       i+1
+            #else:
+                #print('\n',end='')
+            if i//n < m-1:      # Filas (j<m-1).
+                self.nodos[i].add(self.nodos[n*((i+n)//n) + (i%n)])
+                #                                j+1          i
+            #print(f"{i} -> {i//n < m-1}")
+            #print(f"\t + {n*( (i+n)//n ) + (i%n)}")
+        return self;
+
+    # Conecta un grafo a partir del modelo Erdős–Rényi.
+    def gnm(self,m:int = 10):
+        # Por si piden cosas raras xd...
+        if( m > self.posibles ):
+            print("No pueden existir tantas aristas diferentes!")
+            return self;
+        # Preparaciones para trabajar O(n^2)...
+        V = self.nodos.copy()   # Nodos que tienen posiblidad de crear aristas.
+        self.setAll(V,lambda i,valor:valor[:i] +valor[i+1:])                # Ingreso la posibilidad de conectar todos los nodos entre si.
+        # Crea las m aristas O(m)...
+        i:int = 0               # ninguna arista creada.
+        while(i < m):
+            # Eligo mis elmentos...
+            a = random.choice(V)            # Elijo uno de los que tienen posibilidad.
+            #print(f" {i}... {a.id}")
+            #print(f"\t{a.id} -> {[n.id for n in a.val]}")
+            b = random.choice(a.val)        # Elijo cualquier nodo posible a emparejar.
+            #print("\t(",a,',',b,")")
+            #print(f"\t{a.id} -> {[n.id for n in a.val]}")
+            #print(f"\t{b.id} -> {[n.id for n in b.val]}")
+            # Creo la arista...
+            a.add(b)                        # Creo la arista.
+            # Elmino la posibilidad de crear nuevamente esa arista...
+            a.val.remove(b)                 # Elimino la posiblidad de (a,b)
+            if not self.dir:    # Si es no dirigido,
+                b.val.remove(a) # Elimino la posiblidad (b,a).
+                if b.val == []: # Si ya no puede conectarse,
+                    V.remove(b) # Elimina la posiblididad de ser elegido.
+                    print([x.id for x in V])
+            # Si ya no es posible crear más aristas con 'a'.
+            if a.val == []:     # Si ya no es posible conectar con ningun nodo a 'a',
+                V.remove(a)     # Elimino a 'a' de la lista de nodos con posibilidad.
+                print([x.id for x in V])
+            i += 1              # Indico que ya creé una arista.
+        return self; # O(n^2+m) para tiempo, O(n^2) para espacio.
+
+    # crea un grafo con el modelo Gn,p de Gilbert
+    def gnp(self,p:float = 0.5):
+        if (p > 1 or p <= 0):
+            if p != 0:
+                print("ERROR!! La probabilidad debe variar entre 0 y 1")
+            return self;
+        # Preparaciones para trabajar O(n^2)...
+        V = self.nodos.copy()   # Nodos que tienen posiblidad de crear aristas.
+        self.setAll(V,lambda i,valor:valor[:i] +valor[i+1:])                # Ingreso la posibilidad de conectar todos los nodos entre si.
+        del V
+        # Crea las m aristas O(m)...
+        for v in self.nodos:
+            for u in v.val:
+                if random.random() <= p:
+                    # Creo la arista...
+                    v.add(u)                        # Creo la arista.
+                    # Elmino la posibilidad de crear nuevamente esa arista...
+                    v.val.remove(u)                 # Elimino la posiblidad de (v,u)
+                    if not self.dir:    # Si es no dirigido,
+                        u.val.remove(v) # Elimino la posiblidad (u,v).
+        return self; # O(n^2)
+
+    # Crea un grafo geografico simple.
+    def gnr(self,r = 1,col:int = 2):
+        fil = self.card//col -1             # Obtengo el numero de filas posibles.
+        for vi in range(self.card):         # Para cada nodo.
+            xi = vi%col         # Obtengo su posición en x.
+            yi = vi//col        # Obtengo su posición en y.
+            for vj in range(self.card):     # Reviso cada nodo si puede conectarse.
+                xj = vj%col     # Obtengo su posición en x.
+                yj = vj//col    # Obtengo su posición en x.
+                if( r**2 < (xi-xj)**2 + (yi-yj)**2 ): continue              # Fuera del radio.
+                if( (xi,yi) == (xj,yj) ): continue      # Es el mismo nodo.
+                self.nodos[vi].add(self.nodos[vj])      # Lo conecto si cumple.
+        return self;            # O(n^2)
+
+    # Crea un grafo con el modelo Gnd Barabási-Albert
+    def gnd(self,d:int = 1):
+        # Verificaciones...
+        if d == 1 or d > len(self.nodos):
+            print("¡Valor no valido para d!")
+            return self;
+        # Conectamos los d nodos...
+        for vi in self.nodos[:d]:
+            for vj in self.nodos[:d]:
+                if vi == vj: continue
+                vi.add(vj)
+                vi.val = len(vi.A)
+                #print(vi.id,".",vi.val)
+        # Calculo el numero de aristas...
+        sk = d*(d-1) if self.dir else ((d-1)**2+(d-1))/2
+        # Conectamos los nodos restantes...
+        for vi in self.nodos[d:]:
+            for vj in self.nodos[:vi.id]:
+                pj = vj.val/sk
+                if random.random() <= pj:
+                    vi.add(vj)
+                    sk += 1
+                    vi.val += 1
+        return self;
+
+    # Crea un grafo con el modelo Gn Dorogovtsev-Mendes.
+    def gn(self):
+        n = self.card
+        if n<3:
+            print("Se requieren minimo 3 nodos para este algoritmo!!!")
+            return self;
+        for i in range(3):
+            self.nodos[i].add(self.nodos[(i+1)%3])
+        conteo = 3;
+        triangulo = [ x.getAristas() for x in self.nodos[:3]]
+        aristas = []
+        for ar in triangulo:
+            aristas += ar
+        while(conteo<n):
+            ari = random.choice(triangulo)[0]
+            a = ari[0]
+            b = ari[1]
+            self.nodos[conteo].add(a)
+            self.nodos[conteo].add(b)
+            conteo += 1
+        return self
+    pass;
+
+
+
+
+
+
+
+
+
+
+"""                                       FUNCIONES                                    """
+# 1. Crea un grafo en forma de malla. Crea m*n nodos. Para el nodo ni,j crear una arista con el nodo ni+1,j y otra 
+def gnmMalla(n:int = 2,m:int = 5,dirigido:bool=False,grafo_name="G"):
+    """
+    Genera grafo de malla
+    :param m: número de columnas (> 1)
+    :param n: número de filas (> 1)
+    :param dirigido: el grafo es dirigido?
+    :return: grafo generado
+    """
+    return Grafo(grafo_name,n*m,dirigido).gnmalla(n,m);
+
+# 2. Crea un grafo a partir del modelo Erdős–Rényi. Crea n nodos y elegir uniformemente al azar m distintos pares de distintos vértices.
+def gErdosRenyi(n_nodos:int = 10,m_aristas:int =10,dirigido:bool = False,grafo_name = "G"):
+    """
+    Genera grafo aleatorio con el modelo Erdos-Renyi
+    :param n: número de nodos (> 0)
+    :param m: número de aristas (>= n-1)
+    :param dirigido: el grafo es dirigido?
+    :return: grafo generado
+    """
+    return Grafo(grafo_name,n_nodos,dirigido).gnm(m_aristas);
+
+# 3. Modelo Gn,p de Gilbert. Crear n nodos y poner una arista entre cada par independiente y uniformemente con probabilidad p.
+def gGilbert(n:int = 10, p:float = 0.5, dirigido=False,grafo_name="G"):
+    """
+    Genera grafo aleatorio con el modelo Gilbert
+    :param n: número de nodos (> 0)
+    :param p: probabilidad de crear una arista (0, 1)
+    :param dirigido: el grafo es dirigido?
+    :return: grafo generado
+    """
+    return Grafo(grafo_name,n,dirigido).gnp(p);
+
+# 4. Modelo Gn,r geográfico simple. Colocar n nodos en un rectángulo unitario con coordenadas uniformes (o normales)
+# y colocar una arista entre cada par que queda en distancia r o menor.
+def gGeografico(n:int=10, r:int=3, dirigido=False,grafo_name="G",columnas:int = 2):
+    """
+    Genera grafo aleatorio con el modelo geográfico simple
+    :param n: número de nodos (> 0)
+    :param r: distancia máxima para crear un nodo (0, 1)
+    :param dirigido: el grafo es dirigido?
+    :return: grafo generado
+    """
+    return Grafo(grafo_name,n,dirigido).gnr(r,columnas);
+
+# 5. Variante del modelo Gn,d Barabási-Albert. Colocar n nodos uno por uno, asignando a cada uno d aristas a vértices distintos
+# de tal manera que la probabilidad de que el vértice nuevo se conecte a un vértice existente v es proporcional a la cantidad de aristas que v tiene actualmente los primeros d vértices se conecta todos a todos.
+def gBarabasiAlbert(n, d, dirigido=False, grafo_name = 'G'):
+    """
+    Genera grafo aleatorio con el modelo Barabasi-Albert
+    :param n: número de nodos (> 0)
+    :param d: grado máximo esperado por cada nodo (> 1)
+    :param dirigido: el grafo es dirigido?
+    :return: grafo generado
+    """
+    return Grafo(grafo_name,n,init_valor=0,dirigido=dirigido).gnd(d);
+
+# 6. Crea un grafo con Dorogovtsev-Mendes. Crear 3 nodos y 3 aristas formando un triángulo.
+# Después, para cada nodo adicional, se selecciona una arista al azar y se crean aristas entre
+# el nodo nuevo y los extremos de la arista seleccionada.
+def gDorogovtsevMendes(n, dirigido=False,grafo_name = "G"):
+    """
+    Genera grafo aleatorio con el modelo Barabasi-Albert
+    :param n: número de nodos (≥ 3)
+    :param dirigido: el grafo es dirigido?
+    :return: grafo generado
+    """
+    return Grafo(grafo_name,n,dirigido).gn()
+
+# Código que solo se ejecuta si este archivo se corre directamente.
+if __name__ == "__main__":
+    # Resultados de malla...
+    #gnmMalla(5,10).save("1_gnmMalla_50")
+    #gnmMalla(20,10,True).save("1_gnmMalla_200")
+    #gnmMalla(20,25).save("1_gnmMalla_500")
+    # Resultados de Erdős–Rényi...
+    #gErdosRenyi(50,100).save("2_Erdos_50")
+    #gErdosRenyi(200,400,True).save("2_Erdos_200")
+    #gErdosRenyi(500,2000).save("2_Erdos_500")
+    # Resultados de Gilbert...
+    #gGilbert(50,0.3).save("3_Gilbert_50")
+    #gGilbert(200,0.3,True).save("3_Gilbert_200")
+    #gGilbert(500,0.3).save("3_Gilbert_500")
+    # Resultados de geográfico simple...
+    #gGeografico(50,5,False,'GS',5).save("4_GeoSimple_50")
+    #gGeografico(200,10,True,'GS',20).save("4_GeoSimple_200")
+    gGeografico(5000,12.5,False,'GS',20).save("4_GeoSimple_5000")
+    # Resultados de Barabási-Albert...
+    #gBarabasiAlbert(50,4).save("5_Albert_50")
+    #gBarabasiAlbert(200,4,True).save("5_Albert_200")
+    #gBarabasiAlbert(500,4,True).save("5_Albert_500")
+    # Resultados de Dorogovtsev-Mendes...
+    gDorogovtsevMendes(50).save("6_Dorogovtsev_50")
+    gDorogovtsevMendes(200,True).save("6_Dorogovtsev_200")
+    gDorogovtsevMendes(500).save("6_Dorogovtsev_500")
+    pass;
