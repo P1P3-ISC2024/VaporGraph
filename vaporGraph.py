@@ -19,6 +19,7 @@ import random
 import string
 from collections import UserDict
 from unittest import skip
+import copy
 
 """                                       CLASES                                    """
 # Clase para manejar las aristas.
@@ -34,6 +35,12 @@ class Nodo:
         self.val = valor        # Valor que se le desee darle a los nodos
         self.A = Arista()       # Diccionario Nodo: ponderación, si es grafo simple => ponderación = 0.
         pass;
+
+    def copy(self):
+        return copy.copy(self);
+
+    def deepCopy(self):
+        return copy.deepcopy(self);
 
     def __str__(self) -> str:
         des = f" {self.id} -{'>' if self.dir else '-'} "# Imprime según es o no dirigido.
@@ -94,9 +101,51 @@ class Grafo:
         descripcion += "\n}"                            # Cierra la descripción del grafo.
         return descripcion;                             # Retorna el string
 
-    # Indica si la arista (a,b) existe.
-    def exist(self,a,b) -> bool:
-        return b in a.A;                                # La clave 'b' está en el diccinario de 'a'?
+    def copy(self):
+        return copy.copy(self);
+
+    def deepCopy(self):
+        return copy.deepcopy(self);
+
+    # Busca un nodo por su id, mediante busqueda binaria
+    def searchNodo(self,v):
+        izq:int = 0                                     # Limite izquierdo de la búsqueda.
+        der:int = self.card - 1                         # Limite derecho de la búsqueda.
+        while izq <= der:                               # Mientras no explore todo el array.
+            i = izq + (der - izq)//2                    # i toma el valor de la mitad.
+            if self.nodos[i].id == v.id:                 # Si es el nodo buscado.
+                return i;
+            elif self.nodos[i].id < v.id:                # Si el pibote está a ala izquierda del nodo.
+                izq = i + 1                             # El limite izq ahora está a la der de i.
+            else:
+                der = i - 1                             # El limite der está a la izq de i.
+        return -1;                                      # Si no lo encuentra retorna -1.
+
+    # Indica si la arista (a,b) existe, o si el nodo 'a' pertenece al grafo.
+    def exist(self,a,b=None) -> bool:
+        return b in a.A if b!=None else self.searchNodo(a) >= 0;   # La clave 'b' está en el diccinario de 'a'?
+
+    # Sobrescribo el operador 'in' para usar con Aristas (tuplas) o nodos (clase Nodo), para saber si pertenece al grafo.
+    def __contains__(self,item):
+        return item[1] in item[0].A if type(item) != Nodo else self.searchNodo(item) >= 0;
+
+    # Agrega un nodo al grafo.
+    def addVert(self,v,by_id:bool=False):
+        if (not by_id) or self.nodos == []:
+            self.nodos.append(v)
+        else:
+            i=0
+            while(i<self.card):
+                if v.id <= self.nodos[i].id: break
+                i += 1;
+            self.nodos.insert(i,v)
+        self.card = len(self.nodos)
+        self.posibles = self.card**2 if self.dir else ((self.card-1)**2+(self.card-1))/2# La cantidad de aristas que pueden existir.
+        return v;
+
+    # Añade una arista al grafo.
+    def addAri(self,a,b):
+        a.add(b);
 
     # Ingresa un valor a todos los nodos del grafo.
     def setAll(self,valor,fun = None):
@@ -124,8 +173,12 @@ class Grafo:
             print(f"Error al guardar el archivo: {e}")
 
 
+
+
+
+
     # Conecta un grafo gnm malla.
-    def gnmalla(self, n:10,m:10):
+    def gnmalla(self, n:int = 10,m:int = 10):
         for i in range(self.card):
             #print(i,end = ' ')
             if i%n<n-1:         # Columnas.
