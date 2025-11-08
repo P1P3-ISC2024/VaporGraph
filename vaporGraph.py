@@ -171,6 +171,7 @@ class Grafo:
             print(f"Archivo guardado como: {nombre_archivo}")
         except Exception as e:
             print(f"Error al guardar el archivo: {e}")
+        return self;
 
 
 

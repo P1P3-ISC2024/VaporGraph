@@ -15,7 +15,8 @@ anchura y altura.
 """________________________________________________________________________________________"""
 """|                                       Blibliotecas                                   |"""
 """________________________________________________________________________________________"""
-from re import S
+#from re import S
+import os;
 from vaporGraph import *;
 
 class Arbol(Grafo):
@@ -25,9 +26,9 @@ class Arbol(Grafo):
                  nodo_s,                    # Objeto nodo o el ID entero del nodo.
                  g_copy:bool=False,         # True si se quiere evitar modificar el grafo original.
                  id='A',                    # Nombre del grafo.
-                 dirigido: bool = True,     # Indica si es o no el arbol dirigido.
+                 dirigido: bool = False,     # Indica si es o no el arbol dirigido.
                  ) -> None:
-        super().__init__(id, 0, dirigido, False, None)  # Inicializo el grafo que representa el árbol.
+        super().__init__(id, 0, grafo.dir, False, None)  # Inicializo el grafo que representa el árbol.
         if g_copy: grafo = grafo.deepCopy();
         if algoritm == 0 or algoritm == "BFS":
             self.BFS(grafo,nodo_s)
@@ -98,13 +99,41 @@ class Arbol(Grafo):
 
 
 
-
+def testBusqueda(func,*args,prefijo:str='',sufijo:str='',s = 0):
+    Arbol("BFS",func(*args,True).save(sufijo+prefijo),s).save(prefijo+"_BFS_"+sufijo)
+    Arbol("DFS_R",func(*args),s).save(prefijo+"_DFSR_"+sufijo)
+    Arbol("DFS_I",func(*args),s).save(prefijo+"_DFSI_"+sufijo)
 
 
 if __name__ == "__main__":
-    G = Grafo(dirigido=True).gnm()
+    os.chdir("Proyecto2-resultados")
+    """G = gnmMalla(2,5)
     print(G)
-    print(Arbol("BFS",G,0))
-    #print(Arbol("DFS_R",G,0,True))
-    #print(Arbol("DFS_I",G,0,True))
+    A = Arbol("BFS",G,0,)
+    print(A)"""
+    
+    # Resultados de malla...
+    testBusqueda( gnmMalla,5,6, prefijo=("1_gnmMalla_30") )
+    testBusqueda( gnmMalla,10,10,prefijo=("1_gnmMalla_100") )
+    testBusqueda( gnmMalla,20,25, prefijo=("1_gnmMalla_500") )
+    # Resultados de Erdős–Rényi...
+    testBusqueda( gErdosRenyi,30,100, prefijo=("2_Erdos_30") )
+    testBusqueda( gErdosRenyi,100,400, prefijo=("2_Erdos_100") )
+    testBusqueda( gErdosRenyi,500,2000, prefijo=("2_Erdos_500") )
+    # Resultados de Gilbert...
+    testBusqueda( gGilbert,30,0.3, prefijo=("3_Gilbert_30") )
+    testBusqueda( gGilbert,100,0.3, prefijo=("3_Gilbert_100") )
+    testBusqueda( gGilbert,500,0.3, prefijo=("3_Gilbert_500") )
+    # Resultados de geográfico simple...
+    testBusqueda( gGeografico,30,5,'GS',5, prefijo=("4_GeoSimple_30") )
+    testBusqueda( gGeografico,100,10,'GS',20, prefijo=("4_GeoSimple_100") )
+    testBusqueda( gGeografico,500,12.5,'GS',20, prefijo=("4_GeoSimple_500") )
+    # Resultados de Barabási-Albert...
+    testBusqueda( gBarabasiAlbert,30,4, prefijo=("5_Albert_30") )
+    testBusqueda( gBarabasiAlbert,100,4, prefijo=("5_Albert_100") ) 
+    testBusqueda( gBarabasiAlbert,500,4, prefijo=("5_Albert_500") )
+    # Resultados de Dorogovtsev-Mendes...
+    testBusqueda( gDorogovtsevMendes,30, prefijo=("6_Dorogovtsev_30") )
+    testBusqueda( gDorogovtsevMendes,100, prefijo=("6_Dorogovtsev_100") )
+    testBusqueda( gDorogovtsevMendes,500, prefijo=("6_Dorogovtsev_500") )
 
