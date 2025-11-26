@@ -22,6 +22,7 @@ from unittest import skip
 import copy
 
 """                                       CLASES                                    """
+
 # Clase para manejar las aristas.
 class Arista(dict):
     pass;
@@ -32,6 +33,7 @@ class Nodo:
         self.id = id            # Identificador del nodo.
         self.dir = dirigido     # Determina si pertenece a un grafo dirigido o no dirigido
         self.pond = ponderado   # ¿Sus aristas están ponderadas?
+        self.padre = None;      # Guarda un registro de su antesesor en el caso de los árboles.
         self.val = valor        # Valor que se le desee darle a los nodos
         self.A = Arista()       # Diccionario Nodo: ponderación, si es grafo simple => ponderación = 0.
         pass;
@@ -43,15 +45,23 @@ class Nodo:
         return copy.deepcopy(self);
 
     def __str__(self) -> str:
-        des = f" {self.id} -{'>' if self.dir else '-'} "# Imprime según es o no dirigido.
+        if self.pond:           # para mostrar información más detallada
+            des = ''
+            for v in self.A:
+                des += f"\n\t{self.id.__str__()}({self.val.__str__()})" # ID del saliente.
+                des += f" -{'>' if self.dir else '-'} " # Flecha o linea.
+                des += f"{v.id.__str__()}({v.val.__str__()});"       # ID del entrante.
+            return des;
+        des = f"\n\t{self.id} -{'>' if self.dir else '-'} "             # Imprime según es o no dirigido.
         des += '{'
         for v in self.A:                                # Para cada clave del diccionario.
             des += v.id.__str__() + ' '                 # El objeto id debe tener funcion __str__
-        des += '}'
+        des += '};'
         return des;                                     # Debuelve toda la cadena.
 
+
     # Añade una arista ó actualiza el valor de una ya existente.
-    def add(self,nodo,valor = 0) -> None:
+    def add(self,nodo,valor = 1) -> None:
         self.A[nodo] = valor;                           # Añade la clave o la rescribe.
         if not self.dir : nodo.A[self] = valor          # Solo si es no dirigido (doble sentido).
     pass;
@@ -82,6 +92,30 @@ class Nodo:
     pass;
 
 
+# Pila ponderada de vertices.
+class PilaPond(list):
+    # Inicializador.
+    def __init__(init_list:list = []):
+        super().__init__(init_list);
+    # Meter un elemento.
+    def append(self, v:Nodo) -> None:
+        if len(self) == 0:
+            self.insert(0,v)
+            return 0;
+        izq:int = 0                                     # Limite izquierdo de la búsqueda.
+        der:int = len(self) - 1                         # Limite derecho de la búsqueda.
+        while izq <= der:                               # Mientras no explore todo el array.
+            i = izq + (der - izq)//2                    # i toma el valor de la mitad.
+            if v.val >= self[i].val:                    # Si es el nodo buscado.
+                self.insert(i+1,v)                      # Lo agrega después del nodo i.
+                return 0;
+            elif self[i].val < v.val:                   # Si el pibote está a ala izquierda del nodo.
+                izq = i + 1                             # El limite izq ahora está a la der de i.
+            else:
+                der = i - 1                             # El limite der está a la izq de i.
+        self.insert(i,v)
+        return -1;                                      # Si no lo encuentra retorna -1.
+
 
 # Clase grafo encargado de crear los nodos que se neciesiten y tenerlos en una lista acorde al ID.
 class Grafo:
@@ -96,8 +130,12 @@ class Grafo:
 
     def __str__(self) -> str:
         descripcion = ("digraph " if self.dir else "graph ") + self.id.__str__() + " {"
+        if self.pond:
+            for nodo in self.nodos:
+                descripcion += f"\n\t{nodo.id.__str__()}({nodo.val.__str__()})"
+                #descripcion += f" [valor = {nodo.val.__str__()}];"
         for nodo in self.nodos:                         # Manda a expresar las aristas de cada nodo.
-            descripcion += f"\n\t{nodo.__str__()};";
+            descripcion += f"{nodo.__str__()}";
         descripcion += "\n}"                            # Cierra la descripción del grafo.
         return descripcion;                             # Retorna el string
 
@@ -113,9 +151,9 @@ class Grafo:
         der:int = self.card - 1                         # Limite derecho de la búsqueda.
         while izq <= der:                               # Mientras no explore todo el array.
             i = izq + (der - izq)//2                    # i toma el valor de la mitad.
-            if self.nodos[i].id == v.id:                 # Si es el nodo buscado.
+            if self.nodos[i].id == v.id:                # Si es el nodo buscado.
                 return i;
-            elif self.nodos[i].id < v.id:                # Si el pibote está a ala izquierda del nodo.
+            elif self.nodos[i].id < v.id:               # Si el pibote está a ala izquierda del nodo.
                 izq = i + 1                             # El limite izq ahora está a la der de i.
             else:
                 der = i - 1                             # El limite der está a la izq de i.
@@ -151,11 +189,14 @@ class Grafo:
     def setAll(self,valor,fun = None):
         if fun == None:
             for i in range(self.card):
-                self.nodos[i].val = valor.copy();       # Para que sus modif. sean indep.
+                try:
+                    self.nodos[i].val = valor.copy();   # Para que sus modif. sean indep.
+                except AttributeError:
+                    self.nodos[i].val = valor;          # Si no tiene función copy
         else:
             for i in range(self.card):
                 self.nodos[i].val = fun(i,valor);
-        pass;
+        return self;
 
     # Guarda el contenido del grafo.
     def save(self,nombre:str = "vapor", extension:str = ".gv"):
@@ -312,6 +353,53 @@ class Grafo:
             self.nodos[conteo].add(b)
             conteo += 1
         return self
+
+
+    # Algoritmos de Dijkstra...
+    def dijkstra(self,s):
+        """
+        Requiere que los nodos se inicialicen con None.
+        """
+        S = Grafo('S',0,self.dir,self.pond) # Grafo nuevo a generar.
+        # Obtener el primer nodo de búsqueda
+        getNodo = lambda t: self.nodos[t] if type(t) == int else t;
+        pila = PilaPond()       # Pila ponderada (el de menor valor hasta arriba).
+        actual = getNodo(s)     # Obtengo el nodo s.
+        actual.val = 0          # Le pongo el valor 0 porque es el inicial.
+        actual.padre = None     # Indico que no tiene padre.
+        pila.append(actual)     # Lo agrego a la pila.
+        actual = None           # Nungun seleccionado por el momento.
+        # Ir recorriendo el grafo, según la pila...
+        while pila:             # Mientras la pila no se vacie.
+            # Selecciono el siguiente nodo...
+            aux = pila.pop()    # Selecciono el sig en la pila.
+            # Creo una copia con el valor original e indico al original que será explorado...
+            aux2 = aux      # Uso aux2 como duplicado.
+            aux = aux.copy()# Solo creo la copia.
+            # Tratro los valores del elegido nodo para trabajar como el actual...
+            aux.A = Arista()    # La copia ahora está desconectada.
+            aux2.val = True # Altero el valor de visitado del original.
+            # Trabajo con el nodo actual...
+            if actual != None:  # Porque en el primer recorrido no hay actual.
+                S.addVert(actual)           # Añado al nuevo grafo el nodo actual.
+                aux.padre.add(aux) # Conecto el actual con el nodo elegido.
+            actual = aux        # El nodo elegido ahora es el actual.
+            for t in aux2.A:
+                if t.val != True:           # Así sé que ya fue explorado y no lo tengo que buscar.
+                    du = actual.val + aux2.A[t]      # d(u) + l_e (distancia entre el actual y la arista del nodo t)
+                    if t.val == None:       # None == infinito
+                        t.val = du          # Le pongo si o sí ese valor y quien se lo hereda.
+                        t.padre = actual    # Le indico que su padre es el actual (su copia).
+                        pila.append(t)      # Agrego ese nodo a la pila.
+                    else:
+                        if du < t.val:
+                            t.padre = actual# asigno el padre que le herdará la minima.
+                            t.val = du      # La minima dist. es la actual con la arista.
+                        pila.append( pila.pop( pila.index(t) ) )            # Reordena el elemento en la pila.
+        S.addVert(actual)           # Añado al nuevo grafo el nodo actual.
+        return S;
+
+
     pass;
 
 
@@ -325,7 +413,7 @@ class Grafo:
 
 """                                       FUNCIONES                                    """
 # 1. Crea un grafo en forma de malla. Crea m*n nodos. Para el nodo ni,j crear una arista con el nodo ni+1,j y otra 
-def gnmMalla(n:int = 2,m:int = 5,dirigido:bool=False,grafo_name="G"):
+def gnmMalla(n:int = 2,m:int = 5,dirigido:bool=False,grafo_name="G",pon = True):
     """
     Genera grafo de malla
     :param m: número de columnas (> 1)
@@ -333,10 +421,10 @@ def gnmMalla(n:int = 2,m:int = 5,dirigido:bool=False,grafo_name="G"):
     :param dirigido: el grafo es dirigido?
     :return: grafo generado
     """
-    return Grafo(grafo_name,n*m,dirigido).gnmalla(n,m);
+    return Grafo(grafo_name,n*m,dirigido,pon).gnmalla(n,m);
 
 # 2. Crea un grafo a partir del modelo Erdős–Rényi. Crea n nodos y elegir uniformemente al azar m distintos pares de distintos vértices.
-def gErdosRenyi(n_nodos:int = 10,m_aristas:int =10,dirigido:bool = False,grafo_name = "G"):
+def gErdosRenyi(n_nodos:int = 10,m_aristas:int =10,dirigido:bool = False,grafo_name = "G",pon=True):
     """
     Genera grafo aleatorio con el modelo Erdos-Renyi
     :param n: número de nodos (> 0)
@@ -344,10 +432,10 @@ def gErdosRenyi(n_nodos:int = 10,m_aristas:int =10,dirigido:bool = False,grafo_n
     :param dirigido: el grafo es dirigido?
     :return: grafo generado
     """
-    return Grafo(grafo_name,n_nodos,dirigido).gnm(m_aristas);
+    return Grafo(grafo_name,n_nodos,dirigido,pon).gnm(m_aristas);
 
 # 3. Modelo Gn,p de Gilbert. Crear n nodos y poner una arista entre cada par independiente y uniformemente con probabilidad p.
-def gGilbert(n:int = 10, p:float = 0.5, dirigido=False,grafo_name="G"):
+def gGilbert(n:int = 10, p:float = 0.5, dirigido=False,grafo_name="G",pon=True):
     """
     Genera grafo aleatorio con el modelo Gilbert
     :param n: número de nodos (> 0)
@@ -355,11 +443,11 @@ def gGilbert(n:int = 10, p:float = 0.5, dirigido=False,grafo_name="G"):
     :param dirigido: el grafo es dirigido?
     :return: grafo generado
     """
-    return Grafo(grafo_name,n,dirigido).gnp(p);
+    return Grafo(grafo_name,n,dirigido,pon).gnp(p);
 
 # 4. Modelo Gn,r geográfico simple. Colocar n nodos en un rectángulo unitario con coordenadas uniformes (o normales)
 # y colocar una arista entre cada par que queda en distancia r o menor.
-def gGeografico(n:int=10, r:int=3, dirigido=False,grafo_name="G",columnas:int = 2):
+def gGeografico(n:int=10, r:int=3, dirigido=False,grafo_name="G",columnas:int = 2,pon = True):
     """
     Genera grafo aleatorio con el modelo geográfico simple
     :param n: número de nodos (> 0)
@@ -367,11 +455,11 @@ def gGeografico(n:int=10, r:int=3, dirigido=False,grafo_name="G",columnas:int = 
     :param dirigido: el grafo es dirigido?
     :return: grafo generado
     """
-    return Grafo(grafo_name,n,dirigido).gnr(r,columnas);
+    return Grafo(grafo_name,n,dirigido,pon).gnr(r,columnas);
 
 # 5. Variante del modelo Gn,d Barabási-Albert. Colocar n nodos uno por uno, asignando a cada uno d aristas a vértices distintos
 # de tal manera que la probabilidad de que el vértice nuevo se conecte a un vértice existente v es proporcional a la cantidad de aristas que v tiene actualmente los primeros d vértices se conecta todos a todos.
-def gBarabasiAlbert(n, d, dirigido=False, grafo_name = 'G'):
+def gBarabasiAlbert(n, d, dirigido=False, grafo_name = 'G',pon=True):
     """
     Genera grafo aleatorio con el modelo Barabasi-Albert
     :param n: número de nodos (> 0)
@@ -379,44 +467,45 @@ def gBarabasiAlbert(n, d, dirigido=False, grafo_name = 'G'):
     :param dirigido: el grafo es dirigido?
     :return: grafo generado
     """
-    return Grafo(grafo_name,n,init_valor=0,dirigido=dirigido).gnd(d);
+    return Grafo(grafo_name,n,init_valor=0,dirigido=dirigido,ponderado=pon).gnd(d);
 
 # 6. Crea un grafo con Dorogovtsev-Mendes. Crear 3 nodos y 3 aristas formando un triángulo.
 # Después, para cada nodo adicional, se selecciona una arista al azar y se crean aristas entre
 # el nodo nuevo y los extremos de la arista seleccionada.
-def gDorogovtsevMendes(n, dirigido=False,grafo_name = "G"):
+def gDorogovtsevMendes(n, dirigido=False,grafo_name = "G",pon = True):
     """
     Genera grafo aleatorio con el modelo Barabasi-Albert
     :param n: número de nodos (≥ 3)
     :param dirigido: el grafo es dirigido?
     :return: grafo generado
     """
-    return Grafo(grafo_name,n,dirigido).gn()
+    return Grafo(grafo_name,n,dirigido,ponderado=pon).gn()
 
 # Código que solo se ejecuta si este archivo se corre directamente.
 if __name__ == "__main__":
+    print(Grafo('G',9,False,True).gnmalla(3,3).dijkstra(0))#.save());
     # Resultados de malla...
-    #gnmMalla(5,10).save("1_gnmMalla_50")
-    #gnmMalla(20,10,True).save("1_gnmMalla_200")
+    """gnmMalla(3,3).setAll(None).dijkstra(0).save("1_gnmMalla_Djk_9")
+    gnmMalla(20,10,True).setAll(None).dijkstra(0).save("1_gnmMalla_Djk_200")"""
     #gnmMalla(20,25).save("1_gnmMalla_500")
     # Resultados de Erdős–Rényi...
-    #gErdosRenyi(50,100).save("2_Erdos_50")
-    #gErdosRenyi(200,400,True).save("2_Erdos_200")
+    #gErdosRenyi(10,20).setAll(None).dijkstra(0).save("2_Erdos_Djk_10")
+    #gErdosRenyi(200,400,True).setAll(None).dijkstra(0).save("2_Erdos_Djk_200")
     #gErdosRenyi(500,2000).save("2_Erdos_500")
-    # Resultados de Gilbert...
-    #gGilbert(50,0.3).save("3_Gilbert_50")
-    #gGilbert(200,0.3,True).save("3_Gilbert_200")
+    """# Resultados de Gilbert...
+    gGilbert(10,0.3).setAll(None).dijkstra(0).save("3_Gilbert_Djk_10")
+    gGilbert(200,0.3,True).setAll(None).dijkstra(0).save("3_Gilbert_Djk_200")
     #gGilbert(500,0.3).save("3_Gilbert_500")
     # Resultados de geográfico simple...
-    #gGeografico(50,5,False,'GS',5).save("4_GeoSimple_50")
-    #gGeografico(200,10,True,'GS',20).save("4_GeoSimple_200")
-    gGeografico(5000,12.5,False,'GS',20).save("4_GeoSimple_5000")
-    # Resultados de Barabási-Albert...
-    #gBarabasiAlbert(50,4).save("5_Albert_50")
-    #gBarabasiAlbert(200,4,True).save("5_Albert_200")
+    gGeografico(10,5,False,'GS',5).setAll(None).dijkstra(0).save("4_GeoSimple_Djk_10")
+    gGeografico(200,10,True,'GS',20).setAll(None).dijkstra(0).save("4_GeoSimple_Djk_200")
+    #gGeografico(5000,12.5,False,'GS',20).save("4_GeoSimple_5000")
+    # Resultados de Barabási-Albert..."""
+    #gBarabasiAlbert(10,4).setAll(None).dijkstra(0).save("5_Albert_Djk_10")
+    gBarabasiAlbert(200,4).setAll(None).dijkstra(0).save("5_Albert_Djk_200")
     #gBarabasiAlbert(500,4,True).save("5_Albert_500")
     # Resultados de Dorogovtsev-Mendes...
-    gDorogovtsevMendes(50).save("6_Dorogovtsev_50")
-    gDorogovtsevMendes(200,True).save("6_Dorogovtsev_200")
-    gDorogovtsevMendes(500).save("6_Dorogovtsev_500")
+    #gDorogovtsevMendes(10).setAll(None).dijkstra(0).save("6_Dorogovtsev_Djk_10")
+    gDorogovtsevMendes(200).setAll(None).dijkstra(0).save("6_Dorogovtsev_Djk_200")
+    #gDorogovtsevMendes(500).save("6_Dorogovtsev_500")"""
     pass;
