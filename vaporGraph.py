@@ -14,10 +14,13 @@ vistas en "Diseño y analisis de algoritmos".
 
 """                                     BIBLIOTECAS                                 """
 from ast import Return
+from ctypes import Array
+from itertools import count
 from math import sqrt
 import random
 import string
 from collections import UserDict
+from tkinter import SE
 from unittest import skip
 import copy
 
@@ -48,9 +51,10 @@ class Nodo:
         if self.pond:           # para mostrar información más detallada
             des = ''
             for v in self.A:
-                des += f"\n\t{self.id.__str__()}({self.val.__str__()})" # ID del saliente.
+                des += f"\n\t{self.id.__str__()}"+(f"({self.val.__str__()})" if self.val != None else '')# ID del saliente.
                 des += f" -{'>' if self.dir else '-'} " # Flecha o linea.
-                des += f"{v.id.__str__()}({v.val.__str__()});"       # ID del entrante.
+                des += f"{v.id.__str__()}"+(f"({self.val.__str__()})" if self.val != None else '')+';'   # ID del entrante.
+                des += f" [label=\"{self.A[v].__str__()}\"]"
             return des;
         des = f"\n\t{self.id} -{'>' if self.dir else '-'} "             # Imprime según es o no dirigido.
         des += '{'
@@ -62,9 +66,15 @@ class Nodo:
 
     # Añade una arista ó actualiza el valor de una ya existente.
     def add(self,nodo,valor = 1) -> None:
-        self.A[nodo] = valor;                           # Añade la clave o la rescribe.
-        if not self.dir : nodo.A[self] = valor          # Solo si es no dirigido (doble sentido).
+        peso = random.randrange(1,10) if self.pond else valor;
+        self.A[nodo] = peso     # Añade la clave o la rescribe.
+        if not self.dir : nodo.A[self] = peso          # Solo si es no dirigido (doble sentido).
     pass;
+
+    # Elimina un nodo de sus conecciones (elimina arista)
+    def elim(self,nodo) -> None:
+        self.A.pop(nodo)
+        if not self.dir : nodo.A.pop(self);
     
     # Elmina la arista que se relaciona con un nodo.
     def cut(self,nodo) -> None:
@@ -80,7 +90,7 @@ class Nodo:
     def getAristas(self):
         E = []
         for nodo in self.A.keys():
-            E.append( (self,nodo) )
+            E.append( (self,nodo,self.A[nodo]) )        # (a,b,peso)
         return E;
 
     # Devuelve una lista de aristas que maneja en forma de tupla usando el id de los objetos.
@@ -98,7 +108,7 @@ class PilaPond(list):
     def __init__(init_list:list = []):
         super().__init__(init_list);
     # Meter un elemento.
-    def append(self, v:Nodo) -> None:
+    def append(self, v:Nodo):
         if len(self) == 0:
             self.insert(0,v)
             return 0;
@@ -114,6 +124,25 @@ class PilaPond(list):
             else:
                 der = i - 1                             # El limite der está a la izq de i.
         self.insert(i,v)
+        return -1;                                      # Si no lo encuentra retorna -1.
+
+    # Para trabajar aristas tipo tupla (a,b,peso)
+    def appendAri(self,a):
+        if len(self) == 0:
+            self.insert(0,a)
+            return 0;
+        izq:int = 0                                     # Limite izquierdo de la búsqueda.
+        der:int = len(self) - 1                         # Limite derecho de la búsqueda.
+        while izq <= der:                               # Mientras no explore todo el array.
+            i = izq + (der - izq)//2                    # i toma el valor de la mitad.
+            if a[2] >= self[i][2]:                      # Si es el nodo buscado.
+                self.insert(i+1,a)                      # Lo agrega después del nodo i.
+                return 0;
+            elif self[i][2] < a[2]:                     # Si el pibote está a ala izquierda del nodo.
+                izq = i + 1                             # El limite izq ahora está a la der de i.
+            else:
+                der = i - 1                             # El limite der está a la izq de i.
+        self.insert(i,a)
         return -1;                                      # Si no lo encuentra retorna -1.
 
 
@@ -132,7 +161,7 @@ class Grafo:
         descripcion = ("digraph " if self.dir else "graph ") + self.id.__str__() + " {"
         if self.pond:
             for nodo in self.nodos:
-                descripcion += f"\n\t{nodo.id.__str__()}({nodo.val.__str__()})"
+                descripcion += f"\n\t{nodo.id.__str__()}"+(f"({nodo.val.__str__()})" if nodo.val != None else '')
                 #descripcion += f" [valor = {nodo.val.__str__()}];"
         for nodo in self.nodos:                         # Manda a expresar las aristas de cada nodo.
             descripcion += f"{nodo.__str__()}";
@@ -182,8 +211,12 @@ class Grafo:
         return v;
 
     # Añade una arista al grafo.
-    def addAri(self,a,b):
-        a.add(b);
+    def addAri(self,a,b,dist):
+        a.add(b,dist);
+
+    # Para trabajar tuplas (a,b,peso) vease getAristas()
+    def delAri(self,arista):
+        arista[0].elim(arista[1])
 
     # Ingresa un valor a todos los nodos del grafo.
     def setAll(self,valor,fun = None):
@@ -197,6 +230,27 @@ class Grafo:
             for i in range(self.card):
                 self.nodos[i].val = fun(i,valor);
         return self;
+
+    def getAristas(self,ordenadas = True):
+        lista = []
+        for nodo in self.nodos:
+            if self.dir:
+                lista += nodo.getAristas()              # A cada nodo le pregunta y agrega sus aristas.
+            else:
+                aristas = nodo.getAristas()
+                for arista in aristas:                  # Verifica que las aristas no se repitan pero al revés.
+                    if not (arista[1],arista[0],arista[2]) in lista:
+                        lista.append(arista)            # Agrega arista por arista.
+
+        if ordenadas:
+            switch = True
+            while switch:
+                switch = False
+                for i in range(1,len(lista)):
+                    if lista[i-1][2] > lista[i][2]:
+                        lista[i-1] , lista[i] = lista[i] , lista[i-1]
+                        switch = True
+        return lista;
 
     # Guarda el contenido del grafo.
     def save(self,nombre:str = "vapor", extension:str = ".gv"):
@@ -400,6 +454,91 @@ class Grafo:
         return S;
 
 
+
+
+    # TSM Algoritmo de Kruskal.
+    def kruskalD(self):
+        T = Grafo('T',0,self.dir,self.pond) # Grafo nuevo a generar.
+        # Los nodos del grafo original tienen que estár ordenados.
+        # Hacer una copia del conjunto de nodos...
+        v_t = []
+        for n in self.nodos:
+            n.val = True
+            n = n.copy()
+            n.A = Arista()
+            v_t.append(n)
+        # Obtengo las arisats ordenadas...
+        aristas = self.getAristas()
+        count_a = 0                 # Para saber cuantas aristas tiene T
+        # Exploro las aristas...
+        for a in aristas:
+            # Agrego las aristas si no están en T...
+            if a[0].val:            # El primer nodo no está añadido?
+                T.addVert(v_t[a[0].id],True)
+                a[0].val = None     # Modifico el original para no volve a añadirlo.
+                v_t[a[0].id].val = None;    # Añado la copia para que no quede con valor basura.
+            if a[1].val:            # El segundo nodo no está?
+                T.addVert(v_t[a[1].id],True)
+                a[1].val = None     # Modifico el original para no volve a añadirlo.
+                v_t[a[1].id].val = None;    # Añado la copia para que no quede con valor basura.
+            # Agrego la arista...
+            if count_a < T.card - 1:# Por propiedad de ser un árbol |V| = |E| + 1
+                T.addAri(v_t[a[0].id],v_t[a[1].id],a[2])
+                count_a += 1
+        return T;
+
+    # TSM Kruskal Inverso.
+    def kruskalI(self):
+        """
+        Waring!! esta función modifica el grafo original.
+        """
+        # Obtengo las arisats ordenadas...
+        aristas = self.getAristas()
+        count_a = len(aristas)              # Para saber cuantas aristas tiene T
+        # Empiezo a desconectar aristas...
+        while count_a > self.card - 1:
+            if aristas: a = aristas.pop()
+            self.delAri(a)                  # Primero el chanclazo y luego pregunto xD
+            self.setAll(None)
+            if self.dijkstra(a[0]).card < self.card:    # Verifico con dijstra si lo desconecté.
+                self.addAri(a[0],a[1],a[2]) # Justifico el chanclazo y le sobo xD
+            else: count_a -= 1      # Ahora hay una arista menos.
+        return self;
+
+    # TSM con prim.
+    def prim(self):
+        T = Grafo('T',0,self.dir,self.pond) # Grafo nuevo a generar.
+        # Los nodos del grafo original tienen que estár ordenados.
+        # Hacer una copia del conjunto de nodos...
+        v_t = []
+        for n in self.nodos:
+            n.val = True
+            n = n.copy()
+            n.A = Arista()
+            v_t.append(n)
+        # Creo una pila ponderada...
+        pila = PilaPond()       # Pila ponderada (el de menor valor hasta arriba).
+        vecino = self.nodos[0]  # Comienzo con el nodo 0 pero no importa con cual.
+        # Do While la pila no esté vacia...
+        while True:
+            # Para cada arista en el nodo vecino...
+            if vecino.val:
+                for a in vecino.getAristas():
+                    if (not a in pila) and ( True if self.dir else (not (a[1],a[0],a[2]) in pila) ):
+                        pila.appendAri(a)   # La incerto.
+                vecino.val = None
+                v_t[vecino.id].val = None
+                T.addVert(v_t[vecino.id])
+            # Si ya tengo todos los nodos...
+            if T.card == self.card: break;
+            # Por seguridad...
+            if len(pila) == 0: break;
+            # Elijo la arista con menor peso...
+            a = pila.pop(0)
+            if a[1]:            # Si el sig. nodo no ha sido explorado...
+                v_t[a[0].id].add(v_t[a[1].id],a[2])           # Añado la arista con las copias.
+                vecino = a[1]   # Ahora el vecino es el sig.
+        return T;
     pass;
 
 
@@ -483,29 +622,61 @@ def gDorogovtsevMendes(n, dirigido=False,grafo_name = "G",pon = True):
 
 # Código que solo se ejecuta si este archivo se corre directamente.
 if __name__ == "__main__":
-    print(Grafo('G',9,False,True).gnmalla(3,3).dijkstra(0))#.save());
+    #G = Grafo('G',9,ponderado=True).gnmalla(3,3)
+    #print(G)
+    #print(G.prim().save("TestPrim"))
     # Resultados de malla...
-    """gnmMalla(3,3).setAll(None).dijkstra(0).save("1_gnmMalla_Djk_9")
-    gnmMalla(20,10,True).setAll(None).dijkstra(0).save("1_gnmMalla_Djk_200")"""
-    #gnmMalla(20,25).save("1_gnmMalla_500")
+    """G = gnmMalla(3,3)
+    G.kruskalD().save("1_gnmMalla_kD_9")
+    G.kruskalI().save("1_gnmMalla_kI_9")
+    G.prim().save("1_gnmMalla_prim_9")
+    G = gnmMalla(20,10).save("1_gnmMalla_200")
+    G.kruskalD().save("1_gnmMalla_kD_200")
+    G.prim().save("1_gnmMalla_prim_200")
+    G.kruskalI().save("1_gnmMalla_kI_200")"""
     # Resultados de Erdős–Rényi...
-    #gErdosRenyi(10,20).setAll(None).dijkstra(0).save("2_Erdos_Djk_10")
-    #gErdosRenyi(200,400,True).setAll(None).dijkstra(0).save("2_Erdos_Djk_200")
-    #gErdosRenyi(500,2000).save("2_Erdos_500")
-    """# Resultados de Gilbert...
-    gGilbert(10,0.3).setAll(None).dijkstra(0).save("3_Gilbert_Djk_10")
-    gGilbert(200,0.3,True).setAll(None).dijkstra(0).save("3_Gilbert_Djk_200")
-    #gGilbert(500,0.3).save("3_Gilbert_500")
+    """G = gErdosRenyi(10,20).setAll(None).save("2_Erdos_Djk_10")
+    G.kruskalD().save("2_Erdos_kD_10")
+    G.prim().save("2_Erdos_prim_10")
+    G.kruskalI().save("2_Erdos_kI_10")
+    G = gErdosRenyi(200,20).setAll(None).save("2_Erdos_Djk_200")
+    G.kruskalD().save("2_Erdos_kD_200")
+    G.prim().save("2_Erdos_prim_200")
+    G.kruskalI().save("2_Erdos_kI_200")"""
+    # Resultados de Gilbert...
+    """G = gGilbert(10,0.3).setAll(None).save("3_Gilbert_10")
+    G.kruskalD().save("3_Gilbert_kD_10")
+    G.prim().save("3_Gilbert_prim_10")
+    G.kruskalI().setAll(None).save("3_Gilbert_kI_10")
+    G = gGilbert(200,0.3).setAll(None).save("3_Gilbert_200")
+    G.kruskalD().save("3_Gilbert_kD_200")
+    G.prim().save("3_Gilbert_prim_200")
+    G.kruskalI().setAll(None).save("3_Gilbert_kI_200")"""
     # Resultados de geográfico simple...
-    gGeografico(10,5,False,'GS',5).setAll(None).dijkstra(0).save("4_GeoSimple_Djk_10")
-    gGeografico(200,10,True,'GS',20).setAll(None).dijkstra(0).save("4_GeoSimple_Djk_200")
-    #gGeografico(5000,12.5,False,'GS',20).save("4_GeoSimple_5000")
+    """G = gGeografico(10,5,False,'GS',5).setAll(None).save("4_GeoSimple_10")
+    G.kruskalD().save("4_GeoSimple_kD_10")
+    G.prim().save("4_GeoSimple_prim_10")
+    G.kruskalI().setAll(None).save("4_GeoSimple_kI_10")
+    G = gGeografico(200,5,False,'GS',5).setAll(None).save("4_GeoSimple_200")
+    G.kruskalD().save("4_GeoSimple_kD_200")
+    G.prim().save("4_GeoSimple_prim_200")
+    G.kruskalI().setAll(None).save("4_GeoSimple_kI_200")"""
     # Resultados de Barabási-Albert..."""
-    #gBarabasiAlbert(10,4).setAll(None).dijkstra(0).save("5_Albert_Djk_10")
-    gBarabasiAlbert(200,4).setAll(None).dijkstra(0).save("5_Albert_Djk_200")
-    #gBarabasiAlbert(500,4,True).save("5_Albert_500")
+    """G = gBarabasiAlbert(10,4).setAll(None).save("5_Albert_10")
+    G.kruskalD().save("5_Albert_kD_10")
+    G.prim().save("5_Albert_prim_10")
+    G.kruskalI().setAll(None).save("5_Albert_kI_10")
+    G = gBarabasiAlbert(200,4).setAll(None).save("5_Albert_200")
+    G.kruskalD().save("5_Albert_kD_200")
+    G.prim().save("5_Albert_prim_200")
+    G.kruskalI().setAll(None).save("5_Albert_kI_200") # No jala"""
     # Resultados de Dorogovtsev-Mendes...
-    #gDorogovtsevMendes(10).setAll(None).dijkstra(0).save("6_Dorogovtsev_Djk_10")
-    gDorogovtsevMendes(200).setAll(None).dijkstra(0).save("6_Dorogovtsev_Djk_200")
-    #gDorogovtsevMendes(500).save("6_Dorogovtsev_500")"""
+    G = gDorogovtsevMendes(10).setAll(None).save("6_Dorogovtsev_10")
+    G.kruskalD().save("6_Dorogovtsev_kD_10")
+    G.prim().save("6_Dorogovtsev_prim_10")
+    G.kruskalI().setAll(None).save("6_Dorogovtsev_kI_10")
+    G = gDorogovtsevMendes(200).setAll(None).save("6_Dorogovtsev_200")
+    G.kruskalD().save("6_Dorogovtsev_kD_200")
+    G.prim().save("6_Dorogovtsev_prim_200")
+    G.kruskalI().setAll(None).save("6_Dorogovtsev_kI_200")
     pass;
